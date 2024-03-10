@@ -1,0 +1,7 @@
+main branch:
+python main.py --dataset_file cityscapes --coco_path data/cityscapes --batch_size 4 --model de-detr --resume ./checkpoints/de_detr_city/checkpoint.pth --eval
+
+python main.py --dataset_file cityscapes --coco_path data/cityscapes --batch_size 4 --model dela-detr --resume ./checkpoints/dela_detr_city/checkpoint.pth --eval --nms --num_queries 300
+
+detr branch:
+python main.py --dataset_file cityscapes --coco_path data/cityscapes --batch_size 4 --model detr --resume ./checkpoints/detr_city/checkpoint0299.pth --eval

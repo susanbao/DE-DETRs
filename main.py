@@ -189,8 +189,12 @@ def main(args):
                                   weight_decay=args.weight_decay)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
 
+    test_val = False
     dataset_train = build_dataset(image_set='train', args=args)
-    dataset_val = build_dataset(image_set='val', args=args)
+    if test_val:
+        dataset_val = build_dataset(image_set='val', args=args)
+    else:
+        dataset_val = build_dataset(image_set='train', args=args)
 
     if args.distributed:
         if args.cache_mode:
