@@ -207,7 +207,7 @@ class DETR(nn.Module):
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
         if self.aux_loss:
             out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
-        self.store_results(hs, out, store_path = "DETR_CITY", split = "train")
+        self.store_results(hs, out, store_path = "DELADETR_CITY", split = "val")
         return out
 
     @torch.jit.unused
@@ -380,7 +380,7 @@ class SetCriterion(nn.Module):
              targets: list of dicts, such that len(targets) == batch_size.
                       The expected keys in each dict depends on the losses applied, see each loss' doc
         """
-        self.store_results(targets, store_path = "DETR_CITY", split = "train")
+        self.store_results(targets, store_path = "DELADETR_CITY", split = "val")
         bs, num_queries, _ = outputs['pred_logits'].shape
         if self.training:
             if self.repeat_label is not None or self.repeat_ratio is not None:
