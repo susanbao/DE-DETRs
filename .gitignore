@@ -20,3 +20,6 @@ experiment-*
 .mypy_cache/*
 not_tracked_dir/
 .vscode
+data
+logs/
+pro_data
