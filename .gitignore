@@ -22,3 +22,5 @@ not_tracked_dir/
 data/
 logs/
 pro_data/
+data
+pro_data
