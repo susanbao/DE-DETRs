@@ -19,11 +19,33 @@ from .matcher import build_matcher
 from .segmentation import (DETRsegm, PostProcessPanoptic, PostProcessSegm,
                            dice_loss, sigmoid_focal_loss)
 from .transformer import build_transformer, MLP
-
+import json
+import os
 
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
+def transform_tensor_to_list(l):
+    return l.cpu().tolist()
+
+def transform_tensors_to_list(l):
+    if torch.is_tensor(l):
+        return transform_tensor_to_list(l)
+    if isinstance(l, list):
+        r = []
+        for i in l:
+            r.append(transform_tensors_to_list(i))
+        return r
+    if isinstance(l, dict):
+        r = {}
+        for k,v in l.items():
+            r[k] = transform_tensors_to_list(v)
+        return r
+    return l
+
+def create_folder_if_not_exists(folder_path):
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
 
 class DETR(nn.Module):
     """ This is the DETR module that performs object detection """
@@ -98,7 +120,28 @@ class DETR(nn.Module):
         self.transformer.decoder.ref_point_head = self.ref_point_head
         if box_refine:
             self.transformer.decoder.box_refine = self.box_refine
+        self._cnt = 0
 
+    def store_results(self, hidden_states, outs, store_path = "DEDETR_CITY", split = "val"):
+        batch_size = hidden_states.shape[1]
+        for i in range(batch_size):
+            json_data = {}
+            json_data['feature'] = transform_tensors_to_list(hidden_states[-1,i])
+            json_data['pred_logits'] = transform_tensors_to_list(outs['pred_logits'][i])
+            json_data['pred_boxes'] = transform_tensors_to_list(outs['pred_boxes'][i])
+
+            path = "./pro_data/" + store_path
+            create_folder_if_not_exists(path)
+            path = os.path.join(path, split)
+            create_folder_if_not_exists(path)
+            path = os.path.join(path, "outputs")
+            create_folder_if_not_exists(path)
+            path =  os.path.join(path, str(self._cnt) +".json")
+            with open(path, "w") as outfile:
+                json.dump(json_data, outfile)
+
+            self._cnt += 1
+        
     def forward(self, samples: NestedTensor, meta_info):
         """ The forward expects a NestedTensor, which consists of:
                - samples.tensor: batched images, of shape [batch_size x 3 x H x W]
@@ -164,6 +207,7 @@ class DETR(nn.Module):
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
         if self.aux_loss:
             out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
+        self.store_results(hs, out, store_path = "DETR_CITY", split = "train")
         return out
 
     @torch.jit.unused
@@ -203,6 +247,7 @@ class SetCriterion(nn.Module):
         assert repeat_label is None or repeat_ratio is None, "during init, only one of them shall be set"
         self.repeat_label = repeat_label
         self.repeat_ratio = repeat_ratio
+        self._cnt = 0
 
     def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
         """Classification loss (NLL)
@@ -311,6 +356,23 @@ class SetCriterion(nn.Module):
         assert loss in loss_map, f'do you really want to compute {loss} loss?'
         return loss_map[loss](outputs, targets, indices, num_boxes, **kwargs)
 
+    def store_results(self, targets, store_path = "DEDETR_CITY", split = "val"):
+        batch_size = len(targets)
+        for i in range(batch_size):
+            path = os.path.join("./pro_data/" + store_path, split, "outputs", str(self._cnt) +".json")
+            with open(path, 'r') as f:
+                json_data = json.load(f)
+            
+            json_data['gt_labels'] = transform_tensors_to_list(targets[i]['labels'])
+            json_data['gt_boxes'] = transform_tensors_to_list(targets[i]['boxes'])
+            json_data['orig_size'] = transform_tensors_to_list(targets[i]['orig_size'])
+            json_data['size'] = transform_tensors_to_list(targets[i]['size'])
+            
+            with open(path, "w") as outfile:
+                json.dump(json_data, outfile)
+
+            self._cnt += 1
+    
     def forward(self, outputs, targets):
         """ This performs the loss computation.
         Parameters:
@@ -318,6 +380,7 @@ class SetCriterion(nn.Module):
              targets: list of dicts, such that len(targets) == batch_size.
                       The expected keys in each dict depends on the losses applied, see each loss' doc
         """
+        self.store_results(targets, store_path = "DETR_CITY", split = "train")
         bs, num_queries, _ = outputs['pred_logits'].shape
         if self.training:
             if self.repeat_label is not None or self.repeat_ratio is not None:

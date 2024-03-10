@@ -20,9 +20,11 @@ from models import build_model
 import os
 import wandb
 import warnings
+import ipdb
 
 
 def get_args_parser():
+    # ipdb.set_trace()
     parser = argparse.ArgumentParser('Set transformer detector', add_help=False)
     parser.add_argument('--wandb', action='store_true', help="turn on wandb for logging")
     # label augmentation
@@ -204,16 +206,26 @@ def main(args):
     dataset_train = build_dataset(image_set='train', args=args)
     dataset_val = build_dataset(image_set='val', args=args)
 
+    test_val = False
     if args.distributed:
         if args.cache_mode:
             sampler_train = samplers.NodeDistributedSampler(dataset_train)
-            sampler_val = samplers.NodeDistributedSampler(dataset_val, shuffle=False)
+            if test_val:
+                sampler_val = samplers.NodeDistributedSampler(dataset_val, shuffle=False)
+            else:
+                sampler_val = samplers.NodeDistributedSampler(dataset_train, shuffle=False)
         else:
             sampler_train = samplers.DistributedSampler(dataset_train)
-            sampler_val = samplers.DistributedSampler(dataset_val, shuffle=False)
+            if test_val:
+                sampler_val = samplers.DistributedSampler(dataset_val, shuffle=False)
+            else:
+                sampler_val = samplers.DistributedSampler(dataset_train, shuffle=False)
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+        if test_val:
+            sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+        else:
+            sampler_val = torch.utils.data.SequentialSampler(dataset_train)
 
     batch_sampler_train = torch.utils.data.BatchSampler(
         sampler_train, args.batch_size, drop_last=True)
@@ -221,7 +233,12 @@ def main(args):
     data_loader_train = DataLoader(dataset_train, batch_sampler=batch_sampler_train,
                                    collate_fn=utils.collate_fn, num_workers=args.num_workers,
                                    pin_memory=True)
-    data_loader_val = DataLoader(dataset_val, args.batch_size, sampler=sampler_val,
+    if test_val:
+        data_loader_val = DataLoader(dataset_val, args.batch_size, sampler=sampler_val,
+                                     drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers,
+                                     pin_memory=True)
+    else:
+        data_loader_val = DataLoader(dataset_train, args.batch_size, sampler=sampler_val,
                                  drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers,
                                  pin_memory=True)
 
@@ -230,7 +247,10 @@ def main(args):
         coco_val = datasets.coco.build("val", args)
         base_ds = get_coco_api_from_dataset(coco_val)
     else:
-        base_ds = get_coco_api_from_dataset(dataset_val)
+        if test_val:
+            base_ds = get_coco_api_from_dataset(dataset_val)
+        else:
+            base_ds = get_coco_api_from_dataset(dataset_train)
 
     if args.frozen_weights is not None:
         checkpoint = torch.load(args.frozen_weights, map_location='cpu')
